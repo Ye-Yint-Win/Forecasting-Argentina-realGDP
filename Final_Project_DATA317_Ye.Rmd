@@ -1,0 +1,619 @@
+---
+title: "DATA_317_Final_Project_Ye"
+author: "Ye"
+date: "2023-11-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(fpp3)
+library(ggplot2)
+library(fable)
+library(readxl)
+library(tsibble)
+library(urca)
+```
+
+### [Introduction]{.underline}
+
+Real GDP: To determine "real" GDP, its nominal value must be adjusted to take into account price changes to allow us to see whether the value of output has gone up because more is being produced or simply because prices have increased. Moreover, my data set from IMF is Annual percent change, which makes it easier for me later. Inflation Data is also annual percent change.
+
+```{r}
+#Real GDP
+
+real_GDP_raw<- read_excel("SK_n_ARG_realGDP.xls")
+
+#I'm just reusing cleaned excel data from prosposal.
+realGDP_data<- real_GDP_raw%>%
+  rename(Year = 1)%>%
+  select(1,2)
+
+#Since it is an annual data, i have to past "01-01" at the end of every year to make it a time-series data.
+realGDP_data$Year <- as.Date(paste0(realGDP_data$Year, "-01-01"))
+realGDP_data <- realGDP_data %>% filter(Year > as.Date("1991-01-01"))
+
+#Inflation Data
+inflation_raw<- read_excel("inflation_data.xlsx")
+
+inflation_data<- inflation_raw%>%
+  rename(Year = 1)%>%
+  mutate(Argentina = Argentina *100)%>%
+  select(1,2)
+
+inflation_data$Year <- as.Date(paste0(inflation_data$Year, "-01-01"))
+
+ggplot(data = inflation_data) +
+  geom_line(aes(x = Year, y = Argentina, color = "Argentina")) +
+  labs(title = "Inflation of Argentina",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Argentina" = "blue", "South Korea" = "red")) 
+inflation_data <- inflation_data %>% filter(Year > as.Date("1991-01-01"))
+```
+
+Inflation is too high around the late 1980s and, and moreover, inflation flunctuate too much in Argentina, so I decided to go with realGDP data for my final Project for a predicting variable. Here're are inflation and real GDP graph for Argentina after 1991.
+
+```{r}
+
+ggplot(data = realGDP_data) +
+  geom_line(aes(x = Year, y = Argentina, color = "Argentina")) +
+  labs(title = "Real GDP of Argentina",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Argentina" = "blue"))
+
+
+ggplot(data = inflation_data) +
+  geom_line(aes(x = Year, y = Argentina, color = "Argentina")) +
+  labs(title = "Inflation of Argentina",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Argentina" = "blue", "South Korea" = "red")) 
+```
+
+South Korea Data from 1993 to 2013 Argentina Data from 2004 to 2023 This is where the original idea came from (kind of).
+
+#### [**History Lesson:**]{.underline} According to a NY times article, the inflation has gone up to 90% this year and this is not looking good for the country, From this week election, it elected a very right-wing politician with promises on freedom of the market and changing of the currency from Argentinian pesos to US dollars and such.
+
+South Korea after Asian Financial Crisis in 199: What similar about this situation is that they got a lot of financial bailouts from financial institutions around the world, more prominently the IMF (International Monetary Fund), and had a very corporate-centered economic restructuring for regulations and laws. Similarly, Argentina has the most bailout loan from IMF currently and a new economic restructuring with the new political party.
+
+```{r}
+SK_fake_data<- real_GDP_raw%>%
+    rename(Year = 1, `South Korea` = 3)
+SK_fake_data$Year <- as.Date(paste0(SK_fake_data$Year, "-01-01"))
+SK_fake_data<- SK_fake_data %>%
+    select(Year,3)%>%
+  filter(Year > "1993-01-01" & Year < "2013-01-01")%>%
+  mutate(Year = row_number())
+ARG_fake_data<- realGDP_data%>%
+  select(Year,2)%>%
+  filter(Year > "2004-01-01")%>%
+  mutate(Year = row_number())
+
+fake_data<- left_join(SK_fake_data,ARG_fake_data)
+ggplot(data = fake_data) +
+  geom_line(aes(x = Year, y = Argentina, color = "Argentina")) +
+  geom_line(aes(x = Year, y = `South Korea`, color = "South Korea")) +
+  labs(title = "realGDP Comparison",
+       x = "Year",
+       y = "Inflation Annual Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Argentina" = "blue", "South Korea" = "red"))
+```
+
+Argentina is one of the world's major exporters of soybeans and meat. Soybean and cattle data are from 'Food and Agricultural Organization of the United Nations'.
+
+```{r}
+soybean_prod_arg <- read.csv("Soybean_Prod_ARG.csv")%>%
+  select(Year, Value)
+
+#NA variable to be used for calculation for annual change
+soybean_prod_arg$Percentage_Change <- NA
+
+# Calculate annual percentage change using a 'for' loop
+for (i in 2:nrow(soybean_prod_arg)) {
+  soybean_prod_arg$Percentage_Change[i] <- ((soybean_prod_arg$Value[i] - soybean_prod_arg$Value[i - 1]) / soybean_prod_arg$Value[i - 1]) * 100
+}
+
+soybean_prod_arg$Year <- as.Date(paste0(soybean_prod_arg$Year, "-01-01"))
+
+soybean_prod_arg<- soybean_prod_arg%>%
+  filter(Year> "1991-01-01")
+
+#This data is to not mess with original data and for visualization
+GDP_fake<- realGDP_data%>%
+  filter(Year < "2022-01-01")
+
+ggplot(data = soybean_prod_arg) +
+  geom_line(aes(x = Year, y = Percentage_Change, color = "Soybean Production")) +
+  geom_line(aes(x = Year, y = GDP_fake$Argentina, color = "Argentina real GDP")) +
+  labs(title = "Soybean Production vs Argentina Real GDP",
+       x = "Year",
+       y = "Soybean Production Annual Percentage Change",
+       color = "Country") +
+  scale_color_manual(values = c("Soybean Production" = "blue", "Argentina real GDP" = "red"))
+
+```
+
+Fun Fact: Argentinians are among the world's largest producer and consumer of cattle/beef.
+
+```{r}
+ARG_Cattle_data_raw<- read.csv("ARG_Cattle_data.csv")
+
+ARG_Cattle_data <- ARG_Cattle_data_raw%>%
+  select(Year, Value)%>%
+  rename(Cattle_count = 2)
+ARG_Cattle_data$Year <- as.Date(paste0(ARG_Cattle_data$Year, "-01-01"))
+
+#NA variable to be used for calculation for annual change
+ARG_Cattle_data$Percentage_Change_Cattle <- NA
+# Calculate annual percentage change using a 'for' loop
+for (i in 2:nrow(ARG_Cattle_data)) {
+  ARG_Cattle_data$Percentage_Change_Cattle[i] <- ((ARG_Cattle_data$Cattle_count[i] - ARG_Cattle_data$Cattle_count[i - 1]) / ARG_Cattle_data$Cattle_count[i - 1]) * 100
+}
+ARG_Cattle_data<- ARG_Cattle_data %>%
+  filter( Year > "1991-01-01" & Year < "2022-01-01")
+
+ggplot(data = ARG_Cattle_data) +
+  geom_line(aes(x = Year, y = Percentage_Change_Cattle, color = "Cattle Production Annual Percentage Change"))+
+      geom_line(aes(x = Year, y = GDP_fake$Argentina, color = "Argentina real GDP")) +
+  labs(title = "Cattle Production vs Argentina Real GDP",
+       x = "Year",
+       y = "Cattle Production Annual Percentage Change",
+       color = "Country") +
+  scale_color_manual(values = c("Cattle Production Annual Percentage Change" = " blue", "Argentina real GDP" = "red"))
+```
+
+Gross Debt: By comparing what a country owes with what it produces, the debt-to-GDP ratio reliably indicates that particular country's ability to pay back its debts. Gross Debt data is from IMF.
+
+However, Gross Debt Annual Percentage Change is in opposite trend of real GDP as it is calculated from GDP. Therefore, I created Negative Gross Debt Annual Percentage Change by muliplying every data point with '-1' in the loop.
+
+```{r}
+
+#Original Gross Debt Data Cleaning
+ARG_gross_debt_raw<- read.csv("ARG_gross_debt.csv")
+#Percentage of GDP
+ARG_gross_debt<- ARG_gross_debt_raw%>%
+  mutate(Year = as.Date(DATE))%>%
+  select(3,2)%>%
+  rename(Gross_debt =2)%>%
+  filter(Year< "2022-01-01")
+
+#Gross Debt of Argentina for 1991
+ARG_gross_debt$Gross_debt_Per_Change <- NA
+
+# Calculate percentage change using a for loop
+for (i in 2:nrow(ARG_gross_debt)) {
+  ARG_gross_debt$Gross_debt_Per_Change[i] <- ((ARG_gross_debt$Gross_debt[i] - ARG_gross_debt$Gross_debt[i - 1]) / ARG_gross_debt$Gross_debt[i - 1]) *100
+}
+ARG_gross_debt$Gross_debt_Per_Change[1] = ARG_gross_debt$Gross_debt_Per_Change[2]
+
+
+ggplot(data = ARG_gross_debt) +
+  geom_line(aes(x = Year, y = Gross_debt_Per_Change, color = "Gross Debt Annual Percentage Change"))+
+    geom_line(aes(x = Year, y = GDP_fake$Argentina, color = "Argentina real GDP")) +
+  labs(title = "Gross Debt Annual Percentage Change",
+       x = "Year",
+       y = "Gross Debt Annual Percentage Change",
+       color = "Country") +
+  scale_color_manual(values = c("Gross Debt Annual Percentage Change" = "blue", "Argentina real GDP" = "red"))
+
+
+ARG_gross_debt_negative<- ARG_gross_debt_raw%>%
+  mutate(Year = as.Date(DATE))%>%
+  select(3,2)%>%
+  rename(Gross_debt =2)%>%
+  filter(Year< "2022-01-01")
+#Negative gross Data for 1991
+ARG_gross_debt_negative$Gross_debt_Per_Change <- NA
+
+# Calculate percentage change using a for loop
+for (i in 2:nrow(ARG_gross_debt_negative)) {
+  ARG_gross_debt_negative$Gross_debt_Per_Change_negative[i] <- -1*( (ARG_gross_debt_negative$Gross_debt[i] - ARG_gross_debt_negative$Gross_debt[i - 1]) / ARG_gross_debt_negative$Gross_debt[i - 1]) *100
+}
+ARG_gross_debt_negative$Gross_debt_Per_Change_negative[1] = ARG_gross_debt_negative$Gross_debt_Per_Change_negative[2]	
+
+
+ggplot(data = ARG_gross_debt_negative) +
+  geom_line(aes(x = Year, y = Gross_debt_Per_Change_negative, color = "Negative Gross Debt Annual Percentage Change"))+
+    geom_line(aes(x = Year, y = GDP_fake$Argentina, color = "Argentina real GDP")) +
+  labs(title = "Negative Gross Debt Annual Percentage Change",
+       x = "Year",
+       y = "Negative Gross Debt Annual Percentage Change",
+       color = "Country") +
+  scale_color_manual(values = c("Negative Gross Debt Annual Percentage Change" = "blue", "Argentina real GDP" = "red"))
+```
+
+Brazil is Argentina's Neighbor and one of its most important trade partner being two of the biggest countries in South America. Although Brazil's economy is not the best, it doesn't fluctuate as much as Argentina's. I use Brazil's realGDP data from IMF.
+
+```{r}
+brazil_realGDP_raw<-read_excel("Brazil_realGDP.xls")
+
+brazil_realGDP_data<- brazil_realGDP_raw%>%
+  rename(Year = 1)
+
+brazil_realGDP_data$Year <- as.Date(paste0(brazil_realGDP_data$Year, "-01-01")
+                                    )
+brazil_realGDP_data <- brazil_realGDP_data %>% filter(Year > as.Date("1991-01-01") & Year < as.Date("2022-01-01"))
+
+ggplot(data = brazil_realGDP_data) +
+  geom_line(aes(x = Year, y = RealGDP, color = "Brazil real GDP"))+
+    geom_line(aes(x = Year, y = GDP_fake$Argentina, color = "Argentina real GDP")) +
+  labs(title = "Argentina v. Brazil realGDP",
+       x = "Year",
+       y = "Brazil real GDP",
+       color = "Country") +
+  scale_color_manual(values = c("Brazil real GDP" = "blue", "Argentina real GDP" = "red"))
+```
+
+All variables used in this project is plotted against each other here:
+
+```{r}
+#cleaned Data
+realGDP_data<- realGDP_data%>% slice(1:30)
+head(realGDP_data)
+
+#Not to mess with the cleaned data of Argentina's real GDP data, I created a final data with variables used for this projects.
+#I removed the Year format, as I cannot used it as tsibble because there are missing data when months and dates are involved.
+final_table <- realGDP_data %>%
+  mutate(
+    Year = as.double(Year),  # Convert Year to Date format
+    Cattle = ARG_Cattle_data$Percentage_Change_Cattle,
+    Soybean = soybean_prod_arg$Percentage_Change,
+    Gross_Debt = ARG_gross_debt$Gross_debt_Per_Change,
+    Brazil_realGDP = brazil_realGDP_data$RealGDP,
+    Gross_debt_negative = ARG_gross_debt_negative$Gross_debt_Per_Change_negative
+  )
+#Format of the Date changed as it was changed to double.
+#This makes it 1993 to 2022
+final_table <- final_table %>%
+  mutate(Year = 1993 + row_number() - 1) %>%
+as_tsibble(index = Year)
+
+final_table
+# Plotting using ggplot
+ggplot(data = final_table) +
+  geom_line(aes(x = Year, y = Argentina, color = "Argentina real GDP")) +
+  geom_line(aes(x = Year, y = Cattle, color = "Cattle")) +
+  geom_line(aes(x = Year, y = Soybean, color = "Soybean")) +
+  geom_line(aes(x = Year, y = Gross_Debt, color = "Gross Debt")) +
+  geom_line(aes(x = Year, y = Brazil_realGDP, color = "Brazil Real GDP")) +
+  labs(
+    title = "Prediction Variables",
+    x = "Year",
+    y = "Annual Percentage Changes",
+    color = "Variables"
+  )
+```
+
+### **AutoRegression on ARG\_ RealGDP**
+
+The data looks stationary because all my values are percentge change from their previous years. Due to the unitroot_kpss test statistic of 0.1740834 , it confirms that the data is stationary and unitroot_ndiffs says that I don't need any differencing for Argentina real GDP data. The ACF graph shows that the data is white noise and this is stationary.
+
+```{r}
+
+#Check if Argentina Real GDP needs Differencing
+final_ARG_RealGDP = final_table|> select(Argentina)
+#test-statistic
+final_ARG_RealGDP|> features(Argentina, unitroot_kpss)
+#if needs differencing, how much?
+final_ARG_RealGDP|>features(Argentina, unitroot_ndiffs)
+
+summary(ur.kpss(final_ARG_RealGDP$Argentina)) 
+#ACF    
+final_ARG_RealGDP|>ACF() |> autoplot()                 
+
+
+
+```
+
+### [**ARIMA models**]{.underline}
+
+R's in-house ARIMA model. With this, I tested the ARIMA model, which gave me ARIMA model of (0,0,0) whose forecast on the long-term is 0. Ljung_box test confirms it is white noise. This fit_AR of Argentina's real GDP gave an AIC of 159.51.
+
+```{r}
+
+#normal ARIMA
+fit_AR1<- final_table|>
+  model (ARIMA(Argentina))
+
+fc_AR1 = fit_AR1 |>
+  forecast(h = 5)
+fc_AR1 |> autoplot() + 
+  autolayer(final_table,Argentina)+  labs(title = "ARIMA Model (Default Parameters)", x = "Date", y = "Argentina realGDP")
+
+fit_AR1 |> report()
+fit_AR1 |> gg_tsresiduals()+  labs(title = "ARIMA Model (Default Parameters)", x = "Date", y = "Argentina realGDP")
+fit_AR1 |> augment() |>
+  features(.innov, ljung_box,lag = 2)
+
+
+#diff by 1
+final_ARG_RealGDP<- final_ARG_RealGDP%>%
+  mutate(ARG_diff = difference(Argentina,1))
+
+fit_AR_diff<- final_ARG_RealGDP|>
+  model (ARIMA(ARG_diff))
+
+fc_AR_diff = fit_AR_diff |>
+  forecast(h = 5)
+fc_AR_diff |> autoplot() + 
+  autolayer(final_ARG_RealGDP,Argentina)+  labs(title = "ARIMA Model with Differencing", x = "Date", y = "Argentina realGDP")
+
+fit_AR_diff |> report()
+fit_AR_diff |> gg_tsresiduals()+  labs(title = "ARIMA Model with Differencing", x = "Date", y = "Argentina realGDP")
+fit_AR_diff |> augment() |>
+  features(.innov, ljung_box,lag = 2)
+
+#with Log of Argentina
+fit_AR_log<- final_table|>
+  model (ARIMA(log(Argentina)))
+
+fc_AR_log = fit_AR_log |>
+  forecast(h = 5)
+fc_AR_log |> autoplot() + 
+  autolayer(final_table,Argentina)+  labs(title = "ARIMA Model with Log Transformation", x = "Date", y = "Argentina realGDP")
+
+
+fit_AR_log |> report()
+fit_AR_log |> gg_tsresiduals()+  labs(title = "ARIMA Model with Log Transformation", x = "Date", y = "Argentina realGDP")
+fit_AR_log |> augment() |>
+  features(.innov, ljung_box,lag = 2)
+
+```
+
+Let's explore other ARIMA models.
+
+Although the other ARIMA model looks like it's moving, the long-term forecast of 0 seemed to be in favor with an AIC score of 159.51 (0,0,0) instead of 161(1,0,0), 162.7(2,0,0) and162.16 (2,1,0).
+
+```{r}
+fit_AR2<- final_table|>
+  model (ARIMA(Argentina ~ pdq(1,0,0)))|>
+  report(fit_AR2)
+fc_AR2 = fit_AR2 |>
+  forecast(h = 5)
+fc_AR2 |> autoplot() + 
+  autolayer(final_table,Argentina)+  labs(title = "ARIMA Model (1,0,0)", x = "Date", y = "Argentina realGDP")
+
+fit_AR3<- final_table|>
+  model (ARIMA(log(Argentina) ~ pdq(2,0,0)))|>
+  report(fit_AR3)
+fc_AR3 = fit_AR3 |>
+  forecast(h = 5)
+fc_AR3 |> autoplot() + 
+  autolayer(final_table,Argentina)+  labs(title = "ARIMA Model (2,0,0) on log(Argentina realGDP)", x = "Date", y = "log(Argentina realGDP)")
+
+fit_AR4<- final_table|>
+  model (ARIMA(Argentina ~ pdq(2,1,0)))|>
+  report(fit_AR4)
+fc_AR4 = fit_AR4 |>
+  forecast(h = 5)
+fc_AR4 |> autoplot() + 
+  autolayer(final_table,Argentina)+  labs(title = "ARIMA Model (2,1,0)", x = "Date", y = "Argentina realGDP")
+
+
+#for test-statistics
+glance_AR1     <- fit_AR1 |> glance()
+glance_AR_diff <- fit_AR_diff |> glance() 
+glance_AR_log  <- fit_AR_log |> glance() 
+glance_AR2     <- fit_AR2 |> glance()
+glance_AR3     <- fit_AR3 |> glance() 
+glance_AR4     <- fit_AR4 |> glance() 
+
+glance_AR_df <- bind_rows(glance_AR1, glance_AR_diff, glance_AR_log, glance_AR2, glance_AR3, glance_AR4)
+glance_AR_df
+```
+
+### [Trend Model]{.underline}
+
+Now, I tried Forecasting with regression. Since my data doesn't have seasonality, but only a little trend, I use Time-series Linear model for trend on Argentina's realGDP data.
+
+We can see a trend gown downwards. This can be useful for determining forecast later.
+
+```{r}
+
+#first regression
+fit_reg1 <- final_table |>
+  model(TSLM(Argentina~ trend() ))
+        
+#regression plot
+fit_reg1 |>augment()|>
+  autoplot(.fitted, color ="red")+ 
+  autolayer(final_table, Argentina)
+
+#forecast
+fc_reg1= fit_reg1 |>
+  forecast(h = 10)
+
+#Forecast plot with trend
+fc_reg1 |> autoplot() + 
+  autolayer(final_table,Argentina)
+
+fit_reg1 |> report()
+
+#for test-statistics
+summary_reg1<- fit_reg1|>glance()
+summary_reg1
+```
+
+### [Scenario-based Model]{.underline}
+
+Now, I'm doing forecasting with scenarios. The first one is if there is a +-5% changes in Brazil realGDP, what will the forecast be with 80% and 95% interval. With AIC(105.4902) AICc(106.4133), it looks pretty good.
+
+```{r}
+# Fit the TSLM model for Argentina using Brazil realGDP as a predictor
+fit_Scn_brazil<- final_table %>%
+  model(TSLM(Argentina ~ Brazil_realGDP)) %>%
+  report()
+
+
+#Layering regression line
+fit_Scn_brazil |> augment() |>
+  autoplot(.innov, colour = 'red') +
+  autolayer(final_table,Argentina)
+
+
+#setting scenario
+new_cons <- scenarios(
+  "descrease 5% in  Brazil realGDP" = new_data(final_table, 5) |>
+    mutate(Brazil_realGDP = -5),
+  " increase 5% in  Brazil realGDP" = new_data(final_table, 5) |>
+    mutate(Brazil_realGDP = 5),
+  names_to = "Scenario"
+)
+#forecast
+fc_Scn_brazil <- forecast(fit_Scn_brazil, new_cons)
+
+final_table|> 
+  autoplot(Argentina)+
+  autolayer(fc_Scn_brazil)+
+  labs(title ="Argentina's realGDP forecast based on +- 5% changes in Brazil's ")
+
+#for test-statistics
+summary_Scn_brazil <-fit_Scn_brazil |> glance()
+summary_Scn_brazil
+```
+
+The second one has 3 scenarios: 1. 5% increase 2. 5% decrease 3. +5% in Cattle and -5% in Soybean Productions. The forecast will be with 80% and 95% interval. With AIC(114.6131) AICc(116.2131), it looks pretty good.
+
+```{r}
+# Fit the TSLM model for Argentina using Cattle and Soybean Production as a predictor
+fit_scn_soyCattle <- final_table %>%
+  model(TSLM(Argentina ~ Cattle+Soybean)) %>%
+  report()
+
+fit_scn_soyCattle |> augment() |>
+  autoplot(.innov, colour = 'red') +
+  autolayer(final_table,Argentina)
+
+new_cons <- scenarios(
+  "descrease 5% in  production" = new_data(final_table, 5) |>
+    mutate(Cattle = -5, Soybean = -5),
+  " increase 5% in  production" = new_data(final_table, 5) |>
+    mutate(Cattle = 5, Soybean = 5),
+    " increase 5% in  Cattle, decrease 5% in Soybean production" = new_data(final_table, 5) |>
+    mutate(Cattle = 5, Soybean = -5),
+  names_to = "Scenario"
+)
+
+fc_scn_soyCattle <- forecast(fit_scn_soyCattle, new_cons)
+final_table|> 
+  autoplot(Argentina)+
+  autolayer(fc_scn_soyCattle)
+
+#for test-statistics
+summary_scn_soyCattle <-fit_Scn_brazil |> glance()
+summary_scn_soyCattle
+```
+
+### [Vector Auto-Regression(VAR) Model]{.underline}
+
+For the last method, I used. Vector AutoRegresssion. I'm having Argentina realGDP as the predicting variables and there are three models: Negative Gross Debt, Soybean+Cattle Combination, and Brazil realGDP. As you can see below, all of them are white noises. And AICc and AIC scores are in the lower end in all models of this project.
+
+```{r}
+#vector autoregression models
+#only using AICC because my dataset is not big.
+fit_var_Debt <- final_table |>
+  model(    
+    aicc = VAR(vars(Argentina, Gross_debt_negative))
+  )
+
+fit_var_SoyCattle <- final_table|>
+  model(
+    aicc = VAR(vars( Argentina, Soybean, Cattle ))
+  )
+
+fit_var_Brazil <- final_table|>
+  model(
+    aicc = VAR(vars( Argentina,Brazil_realGDP))
+  )
+
+#Predicting Argentina with negatived Gross Debt
+
+fit_var_Debt|>
+  augment()|> 
+    ACF(.innov) |>
+  autoplot()+labs(title ="Argentina realGDP and its Negative Gross Debt Vector Auto Regression forecast")
+fit_var_Debt |> 
+  select(aicc)|>
+  forecast(h = 10) |>
+  autoplot(final_table) +labs(title ="Argentina realGDP and its Negative Gross Debt Vector Auto Regression forecast")
+
+#Predicting Argentina ReaL GDP with Soybean and Cattle Production
+
+fit_var_SoyCattle|>
+  augment()|>
+      ACF(.innov) |>
+  autoplot()+labs(title ="Argentina realGDP and combination Soybean and Cattle Production of Vector Auto Regression forecast")
+fit_var_SoyCattle |> 
+  select(aicc)|>
+  forecast(h = 10) |>
+  autoplot(final_table)+labs(title ="Argentina realGDP and combination Soybean and Cattle Production of Vector Auto Regression forecast")
+
+#Predicting Argentina ReaL GDP with Brazil Real_GDP
+fit_var_Brazil|>
+  augment()|>
+  ACF(.innov) |>
+  autoplot()+labs(title ="Argentina realGDP and Brazil realGDP Vector Auto Regression forecast")
+fit_var_Brazil |> 
+  select(aicc)|>
+  forecast(h = 10) |>
+  autoplot(final_table)+labs(title ="Argentina realGDP and Brazil realGDP Vector Auto Regression forecast")
+
+
+#for test-statistics
+#renaming models
+glance_var_debt     <- fit_var_Debt |> glance()       |>mutate(.model = "VAR(vars(Argentina, Gross_debt_negative)")
+glance_var_SoyCattle <- fit_var_SoyCattle |> glance() |>mutate(.model = "VAR(vars( Argentina, Soybean, Cattle ) ")
+glance_var_Brazil <- fit_var_Brazil |> glance()       |>mutate(.model = " VAR(vars( Argentina,Brazil_realGDP)")
+
+
+glance_var_df <- bind_rows(glance_var_debt, glance_var_SoyCattle, glance_var_Brazil)
+
+```
+
+### [Conclusion]{.underline}
+
+```{r}
+
+#all models in the project
+glance_var_df <- glance_var_df%>% select(.model, AIC, AICc, BIC)
+glance_AR_df <- glance_AR_df%>% select(.model,AIC, AICc, BIC)
+summary_scn_soyCattle <- summary_scn_soyCattle%>% select(.model,AIC, AICc, BIC)
+summary_Scn_brazil <- summary_Scn_brazil %>% select(.model,AIC, AICc, BIC)
+summary_reg1 <- summary_reg1%>%select(.model,AIC, AICc, BIC)
+
+model_df <- bind_rows(glance_AR_df, summary_scn_soyCattle, summary_Scn_brazil, summary_reg1, glance_var_df)
+
+
+model_df%>%arrange(desc(AIC))
+
+```
+
+Although log models shows a lot of potentials, my data have negative numbers, so this is not a good model.
+
+However, The best model is TSLM(Argentina \~ Brazil_realGDP) with AIC of 105.49017. This is understandable as I'm playing safe percentage change, and the model's line also layer most part of the original. Here's the plot:
+
+```{r}
+fit_Scn_brazil |> augment() |>
+  autoplot(.innov, colour = 'red') +
+  autolayer(final_table,Argentina)
+
+final_table|> 
+  autoplot(Argentina)+
+  autolayer(fc_Scn_brazil)+
+  labs(title ="Argentina's realGDP forecast based on +- 5% changes in Brazil's ")
+```
+
+The order of the best model for the forecasting of this data are clear: 1. TSLM/Scenarios based models 2. ARIMA models 3. Vector Auto Regression Models.
+
+Data Sources: Real GDP data source: [https://www.imf.org/external/datamapper/NGDP_RPCH\@WEO/KOR/ARG/BRA](https://www.imf.org/external/datamapper/NGDP_RPCH@WEO/KOR/ARG/BRA){.uri}
+
+Real GDP for both Argentina, Brazil and South Korea extracted from IMF website.
+
+Inflation data source: Inflation data is from Worlddata.info. Argentina: <https://www.worlddata.info/asia/south-korea/inflation-rates.php> South Korea:<https://www.worlddata.info/america/argentina/inflation-rates.php> Brazil:[https://www.imf.org/external/datamapper/PCPIPCH\@WEO/BRA?zoom=BRA&highlight=BRA](https://www.imf.org/external/datamapper/PCPIPCH@WEO/BRA?zoom=BRA&highlight=BRA){.uri} Production Goods Data Source: <https://www.fao.org/faostat/en/#data/QCL>

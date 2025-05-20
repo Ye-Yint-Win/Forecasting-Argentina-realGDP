@@ -1,0 +1,191 @@
+---
+title: "test"
+author: "Ye"
+date: "2023-11-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(dplyr)
+library(fpp3)
+library(ggplot2)
+library(readxl)
+```
+
+
+```{r}
+realGDP_data<- read_excel("SK_n_ARG_realGDP.xls")%>%
+  rename(Year = 1, `South Korea` = 3)
+
+realGDP_data$Year <- as.Date(paste0(realGDP_data$Year, "-01-01"))
+
+head(realGDP_data)
+
+GDPperCap_data<- read_excel("SK_n_ARG_GDPperCap.xls")%>%
+  rename(Year = 1, `South Korea` = 3)
+
+GDPperCap_data$Year <- as.Date(paste0(GDPperCap_data$Year, "-01-01"))
+
+GDPperCap_data
+
+inflation_data<- read_excel("inflation_data.xlsx")%>%
+  rename(Year = 1)%>%
+  mutate(Argentina = Argentina *100,`South Korea` = `South Korea` *100)
+
+inflation_data$Year <- as.Date(paste0(inflation_data$Year, "-01-01"))
+
+head(inflation_data)
+
+
+filter_for_pop_realGDP<-realGDP_data %>%
+  filter(Year <"2023-01-01")
+
+pop_per_ARG <- read_excel("Population_PC_ARG.xlsx")%>%
+  filter(Year > "1979-01-01")%>%
+  mutate(realGDP = filter_for_pop_realGDP$Argentina)%>%
+  rename(Pop_growth = 2)
+  
+
+pop_per_ARG$Year <- as.Date(paste0(pop_per_ARG$Year, "-01-01"))
+head(pop_per_ARG)
+
+```
+
+
+
+```{r}
+ggplot(data = realGDP_data) +
+  geom_line(aes(x = Year, y = Argentina, color = "Argentina")) +
+  geom_line(aes(x = Year, y = `South Korea`, color = "South Korea")) +
+  labs(title = "Real GDP Comparison",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Argentina" = "blue", "South Korea" = "red")) +
+  geom_vline(xintercept = as.Date("1998-01-01"), linetype = "dashed", color = "darkgreen")
+```
+
+
+
+```{r}
+ggplot(data = GDPperCap_data) +
+  geom_line(aes(x = Year, y = Argentina, color = "Argentina")) +
+  geom_line(aes(x = Year, y = `South Korea`, color = "South Korea")) +
+  labs(title = "GDP per Capita Comparison",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Argentina" = "blue", "South Korea" = "red")) +
+  geom_vline(xintercept = as.Date("1998-01-01"), linetype = "dashed", color = "darkgreen")
+```
+
+```{r}
+inflation_data <- inflation_data %>% filter(Year > as.Date("1990-01-01"))
+
+ggplot(data = inflation_data) +
+  geom_line(aes(x = Year, y = Argentina, color = "Argentina")) +
+  geom_line(aes(x = Year, y = `South Korea`, color = "South Korea")) +
+  labs(title = "Inflation Comparison",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Argentina" = "blue", "South Korea" = "red")) +
+  geom_vline(xintercept = as.Date("1998-01-01"), linetype = "dashed", color = "darkgreen")
+```
+
+```{r}
+ggplot(data = pop_per_ARG) +
+  geom_line(aes(x = Year, y = Pop_growth, color = "Argentina")) +
+  geom_line(aes(x = Year, y = realGDP, color = "RealGDP")) +
+  labs(title = "Inflation Comparison",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Argentina" = "blue", "South Korea" = "red")) +
+  geom_vline(xintercept = as.Date("1998-01-01"), linetype = "dashed", color = "darkgreen")
+```
+
+```{r}
+#making very fake p-value fit data
+SK_fake_data<- realGDP_data%>%
+  select(Year,3)%>%
+  filter(Year > "1993-01-01" & Year < "2013-01-01")%>%
+  mutate(Year = row_number())
+
+SK_fake_data
+
+ARG_fake_data<- realGDP_data%>%
+  select(Year,2)%>%
+  filter(Year > "2004-01-01")%>%
+  mutate(Year = row_number())
+
+ARG_fake_data
+fake_data<- left_join(SK_fake_data,ARG_fake_data)
+
+fake_data
+
+ggplot(data = fake_data) +
+  geom_line(aes(x = Year, y = Argentina, color = "Argentina")) +
+  geom_line(aes(x = Year, y = `South Korea`, color = "South Korea")) +
+  labs(title = "realGDP Comparison",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Argentina" = "blue", "South Korea" = "red"))
+
+
+
+```
+
+```{r}
+soybean_prod_arg <- read.csv("Soybean_Prod_ARG.csv")%>%
+  select(Year, Value)
+
+soybean_prod_arg$Percentage_Change <- NA
+
+# Calculate percentage change using a for loop
+for (i in 2:nrow(soybean_prod_arg)) {
+  soybean_prod_arg$Percentage_Change[i] <- ((soybean_prod_arg$Value[i] - soybean_prod_arg$Value[i - 1]) / soybean_prod_arg$Value[i - 1]) * 100
+}
+
+soybean_prod_arg$Year <- as.Date(paste0(soybean_prod_arg$Year, "-01-01"))
+
+soybean_prod_arg<- soybean_prod_arg%>%
+  filter(Year> "1979-01-01")
+
+
+GDP_fake<- realGDP_data%>%
+  filter(Year < "2022-01-01")
+
+GDP_fake
+soybean_prod_arg
+
+ggplot(data = soybean_prod_arg) +
+  geom_line(aes(x = Year, y = Percentage_Change, color = "Soybean Production")) +
+  geom_line(aes(x = Year, y = GDP_fake$Argentina, color = "Argentina real GDP")) +
+  labs(title = "realGDP Comparison",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Soybean Production" = "blue", "Argentina real GDP" = "red"))
+
+```
+```{r}
+ARG_unEm <- read_excel("ARG_unemployment.xlsx")
+
+
+ARG_unEm$Year <- as.Date(paste0(ARG_unEm$Year, "-01-01"))
+ARG_unEm
+
+
+
+ggplot(data = ARG_unEm) +
+  geom_line(aes(x = Year, y = Unemployment, color = "Soybean Production")) +
+  labs(title = "realGDP Comparison",
+       x = "Year",
+       y = "Inflation Rate",
+       color = "Country") +
+  scale_color_manual(values = c("Soybean Production" = "blue", "Argentina real GDP" = "red"))
+```
+
